@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 import random
 import time
 import threading
-import colorsys
+import tkinter as tk
+import math
 
 # Import Analyzer from Rahme
 from analyzer import Analyzer
@@ -42,16 +43,12 @@ class Arduino():
         try:
             self.serial = serial.Serial(self.serialPort, "115200", timeout=1)
             time.sleep(1)
-
         except:
             import traceback
-            traceback.print_exc()
-            print("LINK")
-            
+            traceback.print_exc()     
             try:
                 self.serial.close()
             except:
-                print("LINK 2")
                 pass
 
     def closeSerial(self):
@@ -132,56 +129,37 @@ class AR():
         self.video_capture = cv2.VideoCapture(0)
         self.max_frame_rate = 15
         self.DISPLAY_HEIGHT = 800
-        self.DISPLAY_WIDTH = 1520
+        self.DISPLAY_WIDTH = 1540
 
         self.warningFrames = 0
         self.currentWarning = ""
 
-        self.unmodified_color_dict_HSV = {'black': [[255, 255, 105], [0, 0, 0]],
-                                        'white': [[180, 18, 255], [0, 0, 231]],
-                                        'red1': [[180, 255, 255], [159, 50, 70]],
-                                        'red2': [[9, 255, 255], [0, 50, 70]],
-                                        'green': [[89, 255, 255], [36, 50, 70]],
-                                        'blue': [[128, 255, 255], [90, 50, 70]],
-                                        'yellow': [[35, 255, 255], [25, 50, 70]],
-                                        'purple': [[158, 255, 255], [129, 50, 70]],
-                                        'orange': [[24, 255, 255], [10, 50, 70]],
-                                        'gray': [[180, 18, 230], [0, 0, 40]]}
-
-        self.color_dict_HSV = {'black': [[255, 255, 105], [0, 0, 0]],
-                                'white': [[180, 18, 255], [0, 0, 231]],
-                                'red1': [[180, 255, 255], [159, 50, 70]],
-                                'red2': [[9, 255, 255], [0, 50, 70]],
-                                'green': [[89, 125, 120], [25, 50, 60]],
-                                'blue': [[128, 255, 255], [90, 50, 70]],
-                                'yellow': [[35, 255, 255], [15, 80, 100]],
-                                'purple': [[158, 255, 255], [129, 50, 70]],
-                                'orange': [[24, 255, 255], [10, 50, 70]],
-                                'gray': [[180, 18, 230], [0, 0, 40]]}
-
-        self.color_dict_HSV = self.unmodified_color_dict_HSV     
-
     def release(self):
         self.video_capture.release()
-        #self.out.release()
+        self.videoRecording.release()
+        self.tutorialVideoCapture.release()
+        
 
     def evaluateState(self):
         if self.app.keyboardInput == "q":
             print("Quitting")
             self.app.keyboardInput = ""
             self.state = "quit"
+
         elif self.state == "menu":
             if (self.app.keyboardInput == "tl"):
                 print("Changing State to ringTask")
                 self.app.keyboardInput = ""
                 self.state = "ringTask"
                 self.start_time = time.time()
+                self.guidanceState = 0
 
                 # Start Writing Data to File
                 self.app.motionTracker.startWriting()
 
                 # Start Video File
-                self.out = cv2.VideoWriter(f'ringTask-{self.start_time}.avi', cv2.VideoWriter_fourcc('M','J','P','G'), 15, (self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT))
+                self.videoRecording = cv2.VideoWriter(f'videoFiles/ringTask-{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.avi', cv2.VideoWriter_fourcc('M','J','P','G'), 15, (self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT))
+           
             elif self.app.keyboardInput == "tr":
                 print("Changing State to wireTask")
                 self.app.keyboardInput = ""
@@ -191,7 +169,7 @@ class AR():
                 # Start Writing Data to File
                 self.app.motionTracker.startWriting()
                 # Start Video File
-                self.out = cv2.VideoWriter(f'wireTask-{self.start_time}.avi', cv2.VideoWriter_fourcc('M','J','P','G'), 15, (self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT))
+                self.videoRecording = cv2.VideoWriter(f'videoFiles/wireTask-{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.avi', cv2.VideoWriter_fourcc('M','J','P','G'), 15, (self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT))
 
             elif self.app.keyboardInput == "bl":
                 self.app.keyboardInput = ""
@@ -210,6 +188,7 @@ class AR():
                 self.app.motionTracker.stopWriting()
 
                 # Stop Video
+                self.videoRecording.release()
 
         elif self.state == "wireTask":
             if (self.app.keyboardInput == "tr"):
@@ -221,6 +200,7 @@ class AR():
                 self.app.motionTracker.stopWriting()
 
                 # Stop Video
+                self.videoRecording.release()
 
         elif self.state == "evaluation":
             if self.app.keyboardInput == "bl":
@@ -250,12 +230,14 @@ class AR():
                 self.app.keyboardInput = ""
                 self.state = "wireTaskDemo"
                 self.tutorialVideoCapture = cv2.VideoCapture("wireTaskDemo.avi")
+
         elif self.state == "ringTaskDemo":
             if self.app.keyboardInput == "br":
                 print("Back to Tutorial State")
                 self.app.keyboardInput = ""
                 self.state = "tutorial"
                 self.tutorialVideoCapture.release()
+
         elif self.state == "wireTaskDemo":
             if self.app.keyboardInput == "br":
                 print("Back to Tutorial State")
@@ -275,9 +257,9 @@ class AR():
         elif self.state == "tutorial":
             self.tutorialState()
         elif self.state == "ringTaskDemo":
-            self.ringTaskDemoState()
+            self.tutorialVideoState()
         elif self.state == "wireTaskDemo":
-            self.wireTaskDemoState()
+            self.tutorialVideoState()
 
     # DEFINE PROGRAM STATES
     def menuState(self):
@@ -315,46 +297,77 @@ class AR():
             ret, image = self.video_capture.read()
             image = cv2.resize(image, (self.DISPLAY_WIDTH, self.DISPLAY_HEIGHT))
             
-            if self.state == "ringTaskState":
-                if time.time() - self.start_time < 30:
-                    self.replaceColor(image, 'red2', (0,255,0))
-                elif time.time() - self.start_time < 60:
-                    self.replaceColor(image, 'green', (0,255,0))
+            # Add Guidance
+            if self.state == "ringTask":
+                # if time.time() - self.start_time < 30:
+                #     self.guidanceState = 0
+                # elif time.time() - self.start_time < 60:
+                #     self.guidanceState = 1
+                if (self.guidanceState == 0):
+                    mask = self.replaceColor(image, 'red2', (0,255,0))
+                    if (self.centroidsClose(mask)):
+                        self.guidanceState = 1
+                        print("NEW GUIDANCE STATE UNLOCKED")
+
+                elif (self.guidanceState == 1):
+                    mask = self.replaceColor(image, 'green', (0,255,0))
+                    if (self.centroidsClose(mask)):
+                        self.guidanceState = 2
 
                 if time.time() - self.start_time < 10:
                     self.addGuidingText("Move The Ring to The Peg", image)
-
-                # Modify the image based on the data
-                if self.warningFrames > 0:
-                    self.warningFrames = self.warningFrames - 1
-                    if "Vel" in self.currentWarning:
-                        self.replaceColor(image, 'yellow', (255,0,0))
-                        self.addText(image, f"{self.currentWarning}", "T")
-                        self.addWarningText("SLOW DOWN", image)
-                    elif "Acc" in self.currentWarning:
-                        self.replaceColor(image, 'yellow', (255,0,0))
-                        self.addText(image, f"{self.currentWarning}", "T")
-                        self.addWarningText("SLOW DOWN", image)
-
-                    self.addText(image, f"Ring Task", "TL")
+                    
 
             else: #wireTaskState
-                # Modify the image based on the data
-                if self.warningFrames > 0:
-                    self.warningFrames = self.warningFrames - 1
-                    self.replaceColor(image, 'black', (255,0,0))
-                    self.addText(image, f"{self.currentWarning}", "T")
-                    self.addWarningText("SLOW DOWN", image)
+                imageParts = [image[:,0:round(self.DISPLAY_WIDTH/2-200),:],
+                              image[:,round(self.DISPLAY_WIDTH/2-200):round(self.DISPLAY_WIDTH/2+200),:],
+                              image[:,round(self.DISPLAY_WIDTH/2+200):round(self.DISPLAY_WIDTH),:]]
+                if time.time() - self.start_time < 1:
+                    self.replaceColor(imageParts[0], 'black', (0,255,0))
+                elif time.time() - self.start_time < 2:
+                    self.replaceColor(imageParts[1], 'black', (0,255,0))
+                elif time.time() - self.start_time < 3:
+                    self.replaceColor(imageParts[2], 'black', (0,255,0))
+                elif time.time() - self.start_time < 4:
+                    self.replaceColor(imageParts[0], 'black', (0,255,0))
+                elif time.time() - self.start_time < 5:
+                    self.replaceColor(imageParts[1], 'black', (0,255,0))
+                elif time.time() - self.start_time < 6:
+                    self.replaceColor(imageParts[2], 'black', (0,255,0))
+                elif time.time() - self.start_time < 7:
+                    self.replaceColor(imageParts[0], 'black', (0,255,0))
+                elif time.time() - self.start_time < 8:
+                    self.replaceColor(imageParts[1], 'black', (0,255,0))
+                elif time.time() - self.start_time < 9:
+                    self.replaceColor(imageParts[2], 'black', (0,255,0))
 
-                self.addText(image, f"Wire Task", "TL")
+                if time.time() - self.start_time < 9:
+                    self.addGuidingText("Thread the needle", image)
+                # Modify the image based on the data
+
+            # Add Warnings
+            if self.warningFrames > 0:
+                self.warningFrames = self.warningFrames - 1
+                replaceColor = 'yellow' if self.state == "ringTask" else 'black'
+
+                if "Vel" in self.currentWarning:
+                    self.replaceColor(image, replaceColor, (0,0,255))
+                    self.addWarningText(f'Slow {self.currentWarning.replace("-", " ")[:-4]} vel.', image)
+                elif "Acc" in self.currentWarning:
+                    self.replaceColor(image, replaceColor, (0,180,255))
+                    self.addWarningText(f'Decrease {self.currentWarning.replace("-", " ")[:-4]} accel.', image, color=(0,180,255))
+
             
             # Modify the image with other text
+            if self.state == "ringTask":
+                self.addText(image, f"Ring Task", "TL")
+            else:
+                self.addText(image, f"Wire Task", "TL")
             self.addText(image, f"Time (s): {time_since_start}", "BR")
-
             self.addText(image, f"Complete", "TR")
             self.addText(image, f"Connected: [{'Y' if self.app.motionTracker.leftTool.data.yaw != 0 else 'N'},{'Y' if self.app.motionTracker.rightTool.data.yaw != 0 else 'N'}]", "BL")
 
-            self.out.write(image)
+            self.videoRecording.write(image)
             self.image = image
             cv2.imshow('Laparoscopic Surgery Training Module', image)
 
@@ -393,7 +406,7 @@ class AR():
 
         cv2.imshow('Laparoscopic Surgery Training Module', black)
 
-    def ringTaskDemoState(self):
+    def tutorialVideoState(self):
         if (self.tutorialVideoCapture.isOpened()):
             ret, image = self.tutorialVideoCapture.read()
             if ret == True:
@@ -409,7 +422,7 @@ class AR():
     def run(self):
         self.video_capture = cv2.VideoCapture(self.cameraID)
         cv2.namedWindow("Laparoscopic Surgery Training Module") # Create a named window
-        cv2.moveWindow("Laparoscopic Surgery Training Module", 5, 5)  # Move it to (5,5)
+        #cv2.moveWindow("Laparoscopic Surgery Training Module", 0, 0)  # Move it to (5,5)
         cv2.setMouseCallback("Laparoscopic Surgery Training Module", self.onMouseClick)
         print("Starting Demo Program")
 
@@ -449,7 +462,8 @@ class AR():
                 self.app.keyboardInput = "br"
         if event == cv2.EVENT_RBUTTONDOWN:
             hsv_image = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
-            print(f"REAL HSV: {hsv_image[y,x]}")
+            #print(f"REAL HSV: {hsv_image[y,x]}")
+            self.app.colorCalibration.addColorToLimit(hsv_image[y,x])
 
     def addText(self, image, text, location="C", color=(0,0,255), scale=1, thickness=2, margin=40, line=0):
         font_face = cv2.FONT_HERSHEY_SIMPLEX
@@ -494,88 +508,57 @@ class AR():
             pos = (int(start_x), int(start_y))
 
         cv2.putText(image, text, pos, font_face, scale, color, thickness, cv2.LINE_AA, False)
-       
-    # def addBlackToRedColorContour(self, image):
-    #     # COLOR DETECTION BASED ON HSV (Needs to be calibrated)
 
-    #     lowerLimit = np.array(self.color_dict_HSV.get('black')[1])
-    #     upperLimit = np.array(self.color_dict_HSV.get('black')[0])
+    def centroidsClose(self, mask):
+        
+        # find contours in the binary image
+        contours, hierarchy = cv2.findContours(mask,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        print(f"Number of contours Found: {len(contours)}")
+        centroids = []
+        for c in contours:
+            #print(c)
+            M = cv2.moments(c)
+            #print(M)
+            print(f'Area: {M["m00"]}')
+            if (M["m00"] > 750):
+                # calculate x,y coordinate of center
+                #print(f"Finding Center")
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+                cv2.circle(mask, (cX, cY), 5, (255, 255, 255), -1)
+                cv2.putText(mask, "centroid", (cX - 25, cY - 25),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                #print(f"{cX},{cY}")
+                centroids.append((cX,cY))
+        cv2.imshow('Mask', mask)
+        # Get distance between centroids
+        #print(centroids)
+        print(f"Number of centroids Found: {len(centroids)}")
+        if len(centroids) >= 3:
+            x1 = centroids[0][0]
+            x2 = centroids[2][0]
+            xDiff = abs(x2-x1)
+            y1 = centroids[0][1]
+            y2 = centroids[2][1]
+            yDiff = abs(y2-y1)
+            distance = math.sqrt(xDiff**2 + yDiff**2)
+        
+            print(f"Distance: {distance}")
 
-    #     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            if distance < 100 and distance > 5:
+                return True
+        return False
+            
 
-    #     # find the colors within the specified boundaries and apply
-    #     # the mask
-    #     mask = cv2.inRange(hsv_image, lowerLimit, upperLimit)
 
-    #     color = (0, 0, 255)
-
-    #     image[(mask==255)] = color
-
-    #     # Display the resulting frame
-    #     return image
-
-    # def addYellowToRedColorContour(self, image):
-    #     # COLOR DETECTION BASED ON HSV (Needs to be calibrated)
-
-    #     lowerLimit = np.array(self.color_dict_HSV.get('yellow')[1])
-    #     upperLimit = np.array(self.color_dict_HSV.get('yellow')[0])
-
-    #     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    #     # find the colors within the specified boundaries and apply
-    #     # the mask
-    #     mask = cv2.inRange(hsv_image, lowerLimit, upperLimit)
-
-    #     color = (0, 0, 255)
-
-    #     image[(mask==255)] = color
-
-    #     # Display the resulting frame
-    #     return image
-
-    # def addRedToGreenColorContour(self, image):
-    #     # COLOR DETECTION BASED ON HSV (Needs to be calibrated)
-
-    #     lowerLimit = np.array(self.color_dict_HSV.get('red2')[1])
-    #     upperLimit = np.array(self.color_dict_HSV.get('red2')[0])
-
-    #     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    #     # find the colors within the specified boundaries and apply
-    #     # the mask
-    #     mask = cv2.inRange(hsv_image, lowerLimit, upperLimit)
-
-    #     color = (0, 255, 0)
-
-    #     image[(mask==255)] = color
-
-    #     # Display the resulting frame
-    #     return image
-
-    # def addGreenToGreenColorContour(self, image):
-    #     # COLOR DETECTION BASED ON HSV (Needs to be calibrated)
-
-    #     lowerLimit = np.array(self.color_dict_HSV.get('green')[1])
-    #     upperLimit = np.array(self.color_dict_HSV.get('green')[0])
-
-    #     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    #     # find the colors within the specified boundaries and apply
-    #     # the mask
-    #     mask = cv2.inRange(hsv_image, lowerLimit, upperLimit)
-
-    #     color = (0, 255, 0)
-
-    #     image[(mask==255)] = color
-
-    #     # Display the resulting frame
-    #     return image
-
-    def replaceColor(self, image, originalColorName, newColor):
+    def replaceColor(self, image, originalColorName, newColor): # newColor as BGR
         # COLOR DETECTION BASED ON HSV (Needs to be calibrated)
+        #print(f"Replacing {originalColorName} with {newColor}")
 
-        lowerLimit = np.array(self.color_dict_HSV.get(originalColor)[1])
-        upperLimit = np.array(self.color_dict_HSV.get(originalColor)[0])
+        lowerLimit = np.array(self.app.colorCalibration.calibrated_color_limits.get(originalColorName)[1])
+        upperLimit = np.array(self.app.colorCalibration.calibrated_color_limits.get(originalColorName)[0])
+
+        #print(f"Lower Limit: {lowerLimit}")
+        #print(f"Upper Limit: {upperLimit}")
 
         hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
@@ -585,13 +568,10 @@ class AR():
         image[(mask==255)] = newColor
 
         # Display the resulting frame
-        return image
+        return mask
 
-    def addWarningText(self, text, image):
-
-        color = (0, 0, 255)
-    
-        self.addText(image=image, text=text, location="B", color=color, scale=2, thickness=2, margin=40)
+    def addWarningText(self, text, image, color=(0, 0, 255)):
+        self.addText(image=image, text=text, location="B", color=color, scale=1.5, thickness=2, margin=40)
         return image
     
     def addGuidingText(self, text, image):
@@ -656,7 +636,7 @@ class MotionTracker():
 class Tool(threading.Thread):
     def __init__(self, motionTracker, name, arduino, *args, **kwargs):
         super(Tool, self).__init__(*args, **kwargs)
-        print(f"Inatalizing tool: {name}")
+        print(f"Initalizing tool: {name}")
         self.motionTracker = motionTracker
         self.name = name
         self.arduino = arduino
@@ -670,7 +650,7 @@ class Tool(threading.Thread):
         self.readArduino()
 
     def openFile(self):
-        self.fileName = f"dataFiles/data-{self.name}-{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+        self.fileName = f"dataFiles/data-{self.name}-{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
         print(f"Writing File: {self.fileName}")
         self.file = open(self.fileName, "w")
         self.file.write(f"time,yaw,yawVel,yawAcc,pitch,pitchVel,pitchAcc,surge,surgeVel,surgeAcc\n")
@@ -714,8 +694,11 @@ class Tool(threading.Thread):
 
 # MAIN PYTHON APP CLASS
 class App():
-    def __init__(self, cameraID, motionTracker):
+    def __init__(self, cameraID, motionTracker, colorCalibrationWindow):
         self.motionTracker = motionTracker
+
+        self.colorCalibration = colorCalibrationWindow
+        self.colorCalibration.connectApp(app=self)
 
         self.AR = AR(self, cameraID)
         self.keyboardInput = ""
@@ -724,6 +707,140 @@ class App():
     def run(self):
         self.AR.run()
 
+class ColorCalibrationWindow(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Color Calibration")
+        self.geometry('250x200+10+10')
+
+        self.name = tk.Label(self, text="Color Calibration")
+        self.name.config(font=("Courier", 12))
+        self.name.grid(row=0,column=0)
+
+        self.currentColorName = tk.StringVar(self)
+        self.currentColorName.set("black") # default value
+
+        self.colorNames = ["black", "red1", "red2", "yellow", "green", "brown", "white", "blue"]
+        self.colorNameDropdown = tk.OptionMenu(self, self.currentColorName, *self.colorNames, command=self.updateLimitsText)
+        self.colorNameDropdown.grid(row=1,column=0)
+
+        self.newLimit = tk.Label(self, text="Waiting...")
+        self.newLimit.grid(row=2,column=0)
+
+        self.updateOnClick = tk.IntVar()
+        self.checkBox = tk.Checkbutton(self, text='Update Limit?', variable=self.updateOnClick, onvalue=1, offvalue=0)
+        self.checkBox.grid(row=3,column=0)
+
+        # self.calibrated_color_limits = {'black': [[255, 255, 105], [0, 0, 0]],
+        #                                 'white': [[180, 18, 255], [0, 0, 231]],
+        #                                 'red1': [[180, 255, 255], [159, 50, 70]],
+        #                                 'red2': [[9, 255, 255], [0, 50, 70]],
+        #                                 'green': [[89, 255, 255], [36, 50, 70]],
+        #                                 'blue': [[128, 255, 255], [90, 50, 70]],
+        #                                 'yellow': [[90, 255, 255], [25, 50, 70]],
+        #                                 'purple': [[158, 255, 255], [129, 50, 70]],
+        #                                 'orange': [[24, 255, 255], [10, 50, 70]],
+        #                                 'gray': [[180, 18, 230], [0, 0, 40]]}
+
+        self.calibrated_color_limits = {'black':  [[179, 255, 105], [0, 0, 0]],
+                                        'red1':   [[9, 255, 255],   [0, 50, 70]],
+                                        'red2':   [[180, 255, 255], [159, 50, 70]],
+                                        'yellow': [[35, 255, 255],  [25, 50, 70]],
+                                        'green':  [[80, 255, 255],  [45, 50, 70]],
+                                        'brown':  [[20, 255, 200],  [10, 100, 20]],
+                                        'white':  [[180, 255, 255], [0, 0, 231]],
+                                        'blue':   [[128, 255, 255], [95, 50, 70]]}
+        self.updateFromFile = False
+        if self.updateFromFile:                     
+            with open("color_calibration.txt") as f:
+                for line in f:
+                    (key, upperLimitText, lowerLimitText) = line.split("-")
+                    self.calibrated_color_limits[key] = [[int(numeric_string) for numeric_string in upperLimitText.split(",")], [int(numeric_string) for numeric_string in lowerLimitText.split(",")]]
+
+        self.limits = tk.Label(self, text=f"{self.calibrated_color_limits[self.currentColorName.get()]}")
+        self.limits.grid(row=4,column=0)
+
+        self.inputtxt = tk.Text(self,
+                            height = 1,
+                            width = 30)
+        self.inputtxt.grid(row=5,column=0)
+
+        self.setLimitsButton = tk.Button(self, text="Update Limits", command=self.updateLimits)
+        self.setLimitsButton.grid(row=6,column=0)
+        
+    def run(self):
+        self.after(1000, self.startAppThread)    
+        self.mainloop()
+
+    def startAppThread(self):
+        def appThread():
+            print("Running App Thread")
+            self.app.run()
+
+        x = threading.Thread(target=appThread)
+        x.start()
+
+    def connectApp(self, app):
+        self.app = app
+
+    def close(self):
+        print("Closing Color Calibration Window")
+        self.destroy()
+
+    def updateLimits(self):
+        newLimits = self.inputtxt.get("1.0", "end-1c")
+        print(newLimits)
+
+        # [[100, 255, 255], [90, 50, 70]]
+        newLimitsArr = newLimits[2:-2].split("], [")
+        upperLimitText = newLimitsArr[0]
+        lowerLimitText = newLimitsArr[1]
+
+        upperLimitArr = upperLimitText.split(",")
+        upperLimit = [int(upperLimitArr[0]), int(upperLimitArr[1]), int(upperLimitArr[2])]
+
+        lowerLimitArr = lowerLimitText.split(",")
+        lowerLimit = [int(lowerLimitArr[0]), int(lowerLimitArr[1]), int(lowerLimitArr[2])]
+
+
+        # Upper Limit
+        self.calibrated_color_limits[self.currentColorName.get()][0] = upperLimit
+        # Lower Limit
+        self.calibrated_color_limits[self.currentColorName.get()][1] = lowerLimit
+
+        # Update File
+        self.writeCalibrationToFile()
+
+        self.updateLimitsText()
+
+    def updateLimitsText(self, event=None):
+        self.limits.config(text=f"{self.calibrated_color_limits[self.currentColorName.get()]}")
+
+    def addColorToLimit(self, item):
+        self.newLimit.config(text=f"{item}")
+        print(item)
+
+        if self.updateOnClick.get() == 1:
+            # Add to limit, expand range in dict
+            # Is this done by reference?
+            currentLimits = self.calibrated_color_limits[self.currentColorName.get()]
+            # If item is greater than upper or less than lower
+            if item[0] > currentLimits[0][0] or item[1] > currentLimits[0][1] or item[2] > currentLimits[0][2]:
+                currentLimits[0] = [int(item[0]), int(item[1]), int(item[2])]
+            elif item[0] < currentLimits[1][0] or item[1] < currentLimits[1][1] or item[2] < currentLimits[1][2]:
+                currentLimits[1] = [int(item[0]), int(item[1]), int(item[2])]
+
+            # Update File
+            self.writeCalibrationToFile()
+
+            self.updateLimitsText()
+
+    def writeCalibrationToFile(self):
+        self.file = open("color_calibration.txt", "w")
+        for key, item in self.calibrated_color_limits.items():
+            self.file.write(f"{key}-{item[0][0]},{item[0][1]},{item[0][2]}-{item[1][0]},{item[1][1]},{item[1][2]}\n")
+
+        self.file.close()
 
 # MAIN PROGRAM RUNNING CODE
 if __name__ == "__main__":
@@ -734,8 +851,12 @@ if __name__ == "__main__":
 
         motionTracker = MotionTracker(leftArduino, rightArduino)
 
-        app = App(cameraID, motionTracker)
-        app.run()
+        colorCalibration = ColorCalibrationWindow()
+
+        app = App(cameraID, motionTracker, colorCalibration)
+
+        colorCalibration.connectApp(app=app)
+        colorCalibration.run()
 
     except KeyboardInterrupt:
         print("KI")
@@ -755,6 +876,9 @@ if __name__ == "__main__":
 
 
 
-# TODO: Combine States (Ring task and Wire Task)
-# TODO: Combine color contours into one method
-# TODO: Add live color calibration!
+# TODO: Ring taks CV guidance trigger
+# TODO: Set up Demo code on Jetson Nano
+
+# TODO: Check / Calibrate Analyzer to match
+# TODO: Calibrate Wire Task Guidance
+# TODO: Improve live color calibration!
