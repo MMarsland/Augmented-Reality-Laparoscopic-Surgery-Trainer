@@ -342,6 +342,7 @@ class Analyzer():
 
 
 if __name__ == "__main__":
+    pass
     # Test Code
     #analyzer = Analyzer()
     #analyzer.analyze("dataFiles/data-left-2022-04-06_11-51-55.csv")
