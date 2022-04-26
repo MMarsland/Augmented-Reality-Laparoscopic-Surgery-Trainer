@@ -1,10 +1,16 @@
+'''This file contains the required code for the Analyzer Window that appears when a task is complete.
+
+@Author: Ahmed Rahme
+@Date: April 2022
+'''
+
 # Tkinter
 import tkinter as tk
 # Matplotlib
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import MaxNLocator
-# CSV Reader
+# Other Imports
 import pandas as pd
 import threading
 import datetime
@@ -13,6 +19,7 @@ class Plot(tk.Frame):
     def __init__(self, parent, x_data, y_data, label, color, reference_line, vertical_threshold, fig_dimensions):
         super().__init__(parent)
         fig_width, fig_height, dpi = fig_dimensions
+        
         # matplotlib figure
         self.figure = Figure(figsize=(fig_width, fig_height), dpi=dpi)
         self.ax = self.figure.add_subplot(111)
@@ -49,31 +56,17 @@ class Plot(tk.Frame):
         self.canvas.get_tk_widget().pack()
 
     def addline(self, x_data, y_data, label, color, reference_line, vertical_threshold):
-
         x_data = pd.to_datetime(x_data)
         start_time = x_data.iloc[0]
-        # end_time = self.x_data.iloc[1]
-        # difference = end_time - start_time
-        # seconds = difference.total_seconds()
-        # print(type(difference))
+
         x_data = [str(int((end_time - start_time).total_seconds() / 60)) + ":" + str(
             int((end_time - start_time).total_seconds() % 60)) + ":" + str(
             int(((end_time - start_time).total_seconds() % 1) * 1000)) for end_time in x_data]
-        # self.x_data = [(end_time - start_time).total_seconds() for end_time in self.x_data]
-        # print(x_data)
-        # self.x_data = [str(int((end_time-start_time).total_seconds()*100)) for end_time in self.x_data]
-
-
-        # print(self.x_data)
-        # Add horizonal lines at every high velocity point
-        # self.ax.axvline(x=self.x_data[500], color='r', linestyle='-')
 
         # Create the plot
-
         reference_line = reference_line
         plot = self.ax.plot(x_data, y_data, label=label, color=color)[0]
 
-        # self.plot = self.ax.plot(self.x_data, self.reference_line, label=label, color="red")[0]
         self.lines.append(plot)
         self.legendName.append(label)
         self.ax.legend(self.lines, self.legendName)
@@ -88,30 +81,18 @@ class Plot(tk.Frame):
     def addtwinx(self, x_data, y_data, label, color, reference_line, vertical_threshold, ylabel):
         x_data = pd.to_datetime(x_data)
         start_time = x_data.iloc[0]
-        # end_time = self.x_data.iloc[1]
-        # difference = end_time - start_time
-        # seconds = difference.total_seconds()
-        # print(type(difference))
+
         x_data = [str(int((end_time - start_time).total_seconds() / 60)) + ":" + str(
             int((end_time - start_time).total_seconds() % 60)) + ":" + str(
             int(((end_time - start_time).total_seconds() % 1) * 1000)) for end_time in x_data]
-        # self.x_data = [(end_time - start_time).total_seconds() for end_time in self.x_data]
-        # print(x_data)
-        # self.x_data = [str(int((end_time-start_time).total_seconds()*100)) for end_time in self.x_data]
-
-        # print(self.x_data)
-        # Add horizonal lines at every high velocity point
-        # self.ax.axvline(x=self.x_data[500], color='r', linestyle='-')
-
+       
         # Create the plot
-
         reference_line = reference_line
         twin_axis = self.ax.twinx()
         twin_axis.xaxis.set_major_locator(MaxNLocator(30))
         twin_axis.set_ylabel(ylabel,fontsize=15)
         plot = twin_axis.plot(x_data, y_data, label=label, color=color)[0]
 
-        # self.plot = self.ax.plot(self.x_data, self.reference_line, label=label, color="red")[0]
         self.lines.append(plot)
         self.legendName.append(label)
         self.ax.legend(self.lines, self.legendName)
@@ -123,6 +104,7 @@ class Plot(tk.Frame):
                     plot = \
                     twin_axis.plot([self.x_data[i], self.x_data[i]], [y1, y2], label=label, color="red", linewidth=3)[0]
         return y_data
+
 class ScaleSlider(tk.Frame):
     def __init__(self, parent, length, plots):
         super().__init__(parent)
@@ -188,6 +170,7 @@ class ScaleSlider(tk.Frame):
                     plot[0].ax.set_xlim(self.values[self.minIndex], self.values[self.maxIndex])
                     plot[0].ax.set_ylim(minYValue - maxYValue * 0.10, maxYValue * 1.10)
                     plot[0].canvas.draw_idle()  # redraw plot
+
 class GUI(tk.Tk):
     def __init__(self, analyzer, data, Window_name, vertical_threshold, Window_title, graph_ylabel, twinx_ylabel ,fig_dimension):
         super().__init__()
@@ -237,27 +220,36 @@ class GUI(tk.Tk):
             plot = yawPlot.ax.plot([yawPlot.x_data[0], yawPlot.x_data[-1]], [hori_thresh, hori_thresh], color="red", linewidth=3)[0]
             plot = yawPlot.ax.plot([yawPlot.x_data[0], yawPlot.x_data[-1]], [-hori_thresh, -hori_thresh], color="red", linewidth=3)[0]
         self.plots.append([yawPlot, pitchdata, surgedata])
+
     def close(self):
         print("Closing Application")
         self.destroy()
 
-
 class Analyzer():
+    '''The Analyzer class is used to create the analysis for a given task
+    
+    An Analyzer object can be instantiated from the main program and the 
+    analyze method can be used to open the analysis for a given filename.
+    '''
     def __init__(self):
         self.dataFrame = None
         self.velocity_dataFrame = None
         self.acceleration_dataFrame = None
 
-    def openFile(self, filename):
-        # This will open a given
-        df = pd.read_csv(filename) # Reading the file
-        #print(df.loc[:,"yaw"])
+    def analyze(self,filename, left=True):
+        '''This method is called to analyze the data from a given file stored in the dataFiles directory'''
+        self.openFile(filename)
+        self.calculate_velocity()
+        self.calculate_acceleration()
 
+        self.draw_position_graph(f'{"Left" if left else "Right"} Position', 2, f'{"Left" if left else "Right"} Position Data', [18,8,65])
+        self.draw_VelAcc_graph(f'{"Left" if left else "Right"}Velocity and Acceleration', 20, 0, f'{"Left" if left else "Right"} Velocity and Acceleration Data', [22,5,55])
+
+    def openFile(self, filename):
+        df = pd.read_csv(filename)
         # Convert ms time into datetime
         fulldate = datetime.datetime.now()
-        #print(df.loc[:, "time"])
         df.loc[:, "time"] = df.loc[:, "time"].apply(lambda time : fulldate + datetime.timedelta(milliseconds=time))
-        #print(df.loc[:, "time"])
         self.dataFrame = df
 
     def calculate_velocity(self):
@@ -312,21 +304,11 @@ class Analyzer():
 
         self.acceleration_dataFrame = df
 
-    def analyze(self,filename, left=True):
-        self.openFile(filename)
-        self.calculate_velocity()
-        self.calculate_acceleration()
-
-        self.draw_position_graph(f'{"Left" if left else "Right"} Position', 2, f'{"Left" if left else "Right"} Position Data', [18,8,65])
-        self.draw_VelAcc_graph(f'{"Left" if left else "Right"}Velocity and Acceleration', 20, 0, f'{"Left" if left else "Right"} Velocity and Acceleration Data', [22,5,55])
-
-
-
     def draw_position_graph(self, title, vertical_threshold, Window_name, fig_dimension):
         self.gui = GUI(self, self.dataFrame, title, vertical_threshold, Window_name, "Degrees", "mm", fig_dimension)
         self.gui.add_slider()
         # Run GUI
-        # self.gui.mainloop()
+        #self.gui.mainloop() # Honestly not sure why this call can be omitted? But somehow both windows open.
 
     def draw_VelAcc_graph(self, title, vertical_threshold_vel, vertical_threshold_Acc, Window_name, fig_dimension):
         self.gui = GUI(self, self.velocity_dataFrame, title, vertical_threshold_vel, Window_name, "Velocity(Degrees/s)", "mm/s", fig_dimension)
@@ -336,13 +318,12 @@ class Analyzer():
         self.gui.mainloop()
 
     def close(self):
-        # Close the tkinter window
         try:
             self.gui.close()
         except Exception:
             pass
 
-    # Extras
+    '''Extra Ideas on ways the application could be improved'''
     def compareWith(self, filename1, filename2):
         # Compare two datasets, see who did better
         pass
@@ -359,11 +340,8 @@ class Analyzer():
         # Inform the user of all places they perfomred less that Expertly ("Too high velocity at minute 1:45")
         pass
 
+
 if __name__ == "__main__":
-    analyzer = Analyzer()
-    analyzer.analyze("dataFiles/data-right-2022-04-06_02-26-09.csv")
-    #analyzer.analyze("data-right-2022-03-23_16-02-16")
-    # t1 = threading.Thread(target=analyzer.draw_position_graph, args=("Position", 8, "Position Data", [22,8,65]))
-    # t1.start()
-    # t2 = threading.Thread(target=analyzer.draw_VelAcc_graph, args=("Velocity and Acceleration", 0, "Velocity and Acceleration Data", [26,5,55]))
-    # t2.start()
+    # Test Code
+    #analyzer = Analyzer()
+    #analyzer.analyze("dataFiles/data-left-2022-04-06_11-51-55.csv")
