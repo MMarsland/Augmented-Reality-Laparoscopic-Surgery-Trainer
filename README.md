@@ -6,7 +6,7 @@ The field of laparoscopy is relatively new in the surgery world and it has disti
 ## Overview
 This project involves the creation of an Augmented Reality Laparoscopic Surgery Training Apparatus. For a simple summary the final video for the Project is available on youtube:
 https://www.youtube.com/watch?v=6su7bXyjUVA&t=7s&ab_channel=MichaelMarsland  
-<br>  
+
 This project is broken up into a few parts: The collection of motion data from the sensors, the training program and real-time feedback, and the post-task analysis and evaluation.
 
 The majority of the software for this project is written in python with some Arduino Code (C++) to interface with the sensors.
